@@ -1,0 +1,260 @@
+name: Remote OpenCode - Alma Parung
+
+on:
+  workflow_dispatch:
+
+jobs:
+  remote-opencode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    env:
+      # ==========================================
+      # VPS CONFIGURATION
+      # ==========================================
+      VPS_HOST: "103.107.206.5"
+      VPS_PORT: "2480"
+      VPS_USER: "heru"
+
+      # GANTI dengan password SSH user heru
+      VPS_PASSWORD: "H3ru@2026"
+
+      # Folder project permanen di VPS
+      VPS_PROJECT: "/home/heru/alma-parung"
+
+      # Folder project di GitHub Runner
+      RUNNER_PROJECT: "/home/runner/alma-parung"
+
+    steps:
+
+      # ==========================================
+      # 1. INSTALL DEPENDENCIES
+      # ==========================================
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo " INSTALL DEPENDENCIES"
+          echo "=========================================="
+
+          sudo apt-get update
+
+          sudo apt-get install -y \
+            sshfs \
+            fuse3 \
+            curl \
+            git \
+            tmux \
+            sshpass
+
+          echo ""
+          echo "Dependencies installed successfully."
+
+
+      # ==========================================
+      # 2. INSTALL OPENCODE
+      # ==========================================
+      - name: Install OpenCode
+        shell: bash
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo " INSTALL OPENCODE"
+          echo "=========================================="
+
+          curl -fsSL https://opencode.ai/install | bash
+
+          export PATH="$HOME/.opencode/bin:$PATH"
+
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+
+          echo ""
+          echo "OpenCode location:"
+          which opencode
+
+          echo ""
+          echo "OpenCode version:"
+          opencode --version
+
+          echo ""
+          echo "OpenCode installed successfully."
+
+
+      # ==========================================
+      # 3. PREPARE SSH
+      # ==========================================
+      - name: Prepare SSH
+        shell: bash
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo " PREPARE SSH"
+          echo "=========================================="
+
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+
+          touch "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          ssh-keyscan \
+            -p "$VPS_PORT" \
+            -T 10 \
+            "$VPS_HOST" \
+            >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
+
+          echo ""
+          echo "SSH prepared."
+
+
+      # ==========================================
+      # 4. TEST VPS CONNECTION
+      # ==========================================
+      - name: Test VPS connection
+        shell: bash
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo " TEST VPS CONNECTION"
+          echo "=========================================="
+
+          echo ""
+          echo "Host : $VPS_HOST"
+          echo "Port : $VPS_PORT"
+          echo "User : $VPS_USER"
+          echo ""
+
+          export SSHPASS="$VPS_PASSWORD"
+
+          sshpass -e ssh \
+            -p "$VPS_PORT" \
+            -o PreferredAuthentications=password \
+            -o PubkeyAuthentication=no \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=15 \
+            "$VPS_USER@$VPS_HOST" \
+            "echo 'VPS SSH CONNECTION OK'; echo ''; echo 'Project directory:'; ls -ld '$VPS_PROJECT'"
+
+          echo ""
+          echo "=========================================="
+          echo " VPS CONNECTION SUCCESSFUL"
+          echo "=========================================="
+
+
+      # ==========================================
+      # 5. MOUNT VPS PROJECT
+      # ==========================================
+      - name: Mount Alma Parung
+        shell: bash
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo " MOUNT ALMA PARUNG"
+          echo "=========================================="
+
+          mkdir -p "$RUNNER_PROJECT"
+
+          fusermount3 -u "$RUNNER_PROJECT" 2>/dev/null || true
+
+          echo ""
+          echo "VPS:"
+          echo "$VPS_USER@$VPS_HOST:$VPS_PROJECT"
+
+          echo ""
+          echo "Runner:"
+          echo "$RUNNER_PROJECT"
+
+          echo ""
+
+          sshfs \
+            "$VPS_USER@$VPS_HOST:$VPS_PROJECT" \
+            "$RUNNER_PROJECT" \
+            -p "$VPS_PORT" \
+            -o password_stdin \
+            -o StrictHostKeyChecking=no \
+            -o reconnect \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=3 \
+            <<< "$VPS_PASSWORD"
+
+          echo ""
+          echo "=========================================="
+          echo " VPS PROJECT MOUNTED"
+          echo "=========================================="
+
+          echo ""
+          echo "Mount berhasil."
+
+
+      # ==========================================
+      # 6. START SSH ACCESS
+      # ==========================================
+      - name: Start SSH access
+        uses: valeriangalliat/action-sshd-cloudflared@v4
+
+
+      # ==========================================
+      # 7. KEEP RUNNER ALIVE
+      # ==========================================
+      - name: Keep runner alive
+        shell: bash
+        run: |
+          echo ""
+          echo "=========================================="
+          echo " REMOTE OPENCODE READY"
+          echo "=========================================="
+
+          echo ""
+          echo "GitHub Runner sudah siap."
+
+          echo ""
+          echo "Gunakan command SSH yang diberikan"
+          echo "oleh step:"
+          echo ""
+          echo "Start SSH access"
+
+          echo ""
+          echo "Setelah SSH berhasil:"
+          echo ""
+          echo "  cd ~/alma-parung"
+          echo ""
+          echo "Kemudian:"
+          echo ""
+          echo "  opencode"
+
+          echo ""
+          echo "=========================================="
+
+          echo ""
+          echo "Runner akan tetap hidup sampai:"
+          echo "- workflow dihentikan"
+          echo "- workflow timeout"
+          echo "- runner mengalami masalah"
+          echo ""
+
+          while true; do
+            sleep 60
+          done
+
+
+      # ==========================================
+      # 8. CLEANUP
+      # ==========================================
+      - name: Cleanup
+        if: always()
+        shell: bash
+        run: |
+          echo "=========================================="
+          echo " CLEANUP"
+          echo "=========================================="
+
+          fusermount3 -u "$RUNNER_PROJECT" 2>/dev/null || true
+
+          echo ""
+          echo "Cleanup complete."

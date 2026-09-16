@@ -9,35 +9,21 @@ jobs:
     timeout-minutes: 360
 
     env:
-      # ==========================================
-      # VPS CONFIGURATION
-      # ==========================================
       VPS_HOST: "103.107.206.5"
       VPS_PORT: "2480"
       VPS_USER: "heru"
-
-      # GANTI dengan password SSH user heru
       VPS_PASSWORD: "H3ru@2026"
 
-      # Folder project permanen di VPS
       VPS_PROJECT: "/home/heru/alma-parung"
-
-      # Folder project di GitHub Runner
       RUNNER_PROJECT: "/home/runner/alma-parung"
 
     steps:
 
-      # ==========================================
-      # 1. INSTALL DEPENDENCIES
-      # ==========================================
+      # 1. Install dependencies
       - name: Install dependencies
         shell: bash
         run: |
           set -e
-
-          echo "=========================================="
-          echo " INSTALL DEPENDENCIES"
-          echo "=========================================="
 
           sudo apt-get update
 
@@ -49,21 +35,11 @@ jobs:
             tmux \
             sshpass
 
-          echo ""
-          echo "Dependencies installed successfully."
-
-
-      # ==========================================
-      # 2. INSTALL OPENCODE
-      # ==========================================
+      # 2. Install OpenCode
       - name: Install OpenCode
         shell: bash
         run: |
           set -e
-
-          echo "=========================================="
-          echo " INSTALL OPENCODE"
-          echo "=========================================="
 
           curl -fsSL https://opencode.ai/install | bash
 
@@ -71,29 +47,14 @@ jobs:
 
           echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
 
-          echo ""
-          echo "OpenCode location:"
           which opencode
-
-          echo ""
-          echo "OpenCode version:"
           opencode --version
 
-          echo ""
-          echo "OpenCode installed successfully."
-
-
-      # ==========================================
-      # 3. PREPARE SSH
-      # ==========================================
+      # 3. Prepare SSH
       - name: Prepare SSH
         shell: bash
         run: |
           set -e
-
-          echo "=========================================="
-          echo " PREPARE SSH"
-          echo "=========================================="
 
           mkdir -p "$HOME/.ssh"
           chmod 700 "$HOME/.ssh"
@@ -107,27 +68,11 @@ jobs:
             "$VPS_HOST" \
             >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
 
-          echo ""
-          echo "SSH prepared."
-
-
-      # ==========================================
-      # 4. TEST VPS CONNECTION
-      # ==========================================
+      # 4. Test VPS connection
       - name: Test VPS connection
         shell: bash
         run: |
           set -e
-
-          echo "=========================================="
-          echo " TEST VPS CONNECTION"
-          echo "=========================================="
-
-          echo ""
-          echo "Host : $VPS_HOST"
-          echo "Port : $VPS_PORT"
-          echo "User : $VPS_USER"
-          echo ""
 
           export SSHPASS="$VPS_PASSWORD"
 
@@ -138,39 +83,22 @@ jobs:
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=15 \
             "$VPS_USER@$VPS_HOST" \
-            "echo 'VPS SSH CONNECTION OK'; echo ''; echo 'Project directory:'; ls -ld '$VPS_PROJECT'"
+            "
+              echo 'VPS SSH CONNECTION OK'
+              echo ''
+              echo 'Project directory:'
+              ls -ld '$VPS_PROJECT'
+            "
 
-          echo ""
-          echo "=========================================="
-          echo " VPS CONNECTION SUCCESSFUL"
-          echo "=========================================="
-
-
-      # ==========================================
-      # 5. MOUNT VPS PROJECT
-      # ==========================================
+      # 5. Mount Alma Parung dari VPS
       - name: Mount Alma Parung
         shell: bash
         run: |
           set -e
 
-          echo "=========================================="
-          echo " MOUNT ALMA PARUNG"
-          echo "=========================================="
-
           mkdir -p "$RUNNER_PROJECT"
 
           fusermount3 -u "$RUNNER_PROJECT" 2>/dev/null || true
-
-          echo ""
-          echo "VPS:"
-          echo "$VPS_USER@$VPS_HOST:$VPS_PROJECT"
-
-          echo ""
-          echo "Runner:"
-          echo "$RUNNER_PROJECT"
-
-          echo ""
 
           sshfs \
             "$VPS_USER@$VPS_HOST:$VPS_PROJECT" \
@@ -183,25 +111,60 @@ jobs:
             -o ServerAliveCountMax=3 \
             <<< "$VPS_PASSWORD"
 
-          echo ""
-          echo "=========================================="
-          echo " VPS PROJECT MOUNTED"
-          echo "=========================================="
+          echo "Mount Alma Parung berhasil."
+
+      # 6. Buat password SSH runner
+      - name: Set runner SSH password
+        shell: bash
+        run: |
+          set -e
+
+          echo "runner:GANTI_PASSWORD_RUNNER" | sudo chpasswd
+
+      # 7. Siapkan session OpenCode Alma Parung
+      - name: Prepare OpenCode session
+        shell: bash
+        run: |
+          set -e
+
+          export PATH="$HOME/.opencode/bin:$PATH"
+
+          mkdir -p "$RUNNER_PROJECT"
+
+          # Pastikan tmux session belum ada
+          tmux kill-session -t alma-parung 2>/dev/null || true
+
+          # Buat session tmux baru
+          tmux new-session \
+            -d \
+            -s alma-parung \
+            -c "$RUNNER_PROJECT"
+
+          # Jalankan OpenCode di dalam session
+          tmux send-keys \
+            -t alma-parung \
+            "cd '$RUNNER_PROJECT' && opencode" \
+            C-m
 
           echo ""
-          echo "Mount berhasil."
+          echo "=========================================="
+          echo " OPEN CODE ALMA PARUNG READY"
+          echo "=========================================="
+          echo ""
+          echo "Project : $RUNNER_PROJECT"
+          echo "Session : alma-parung"
+          echo ""
+          echo "Setelah SSH masuk:"
+          echo ""
+          echo "  tmux attach -t alma-parung"
+          echo ""
+          echo "=========================================="
 
-
-      # ==========================================
-      # 6. START SSH ACCESS
-      # ==========================================
+      # 8. Start SSH access
       - name: Start SSH access
         uses: valeriangalliat/action-sshd-cloudflared@v4
 
-
-      # ==========================================
-      # 7. KEEP RUNNER ALIVE
-      # ==========================================
+      # 9. Keep runner alive
       - name: Keep runner alive
         shell: bash
         run: |
@@ -209,52 +172,25 @@ jobs:
           echo "=========================================="
           echo " REMOTE OPENCODE READY"
           echo "=========================================="
-
           echo ""
-          echo "GitHub Runner sudah siap."
-
+          echo "SSH user : runner"
           echo ""
-          echo "Gunakan command SSH yang diberikan"
-          echo "oleh step:"
+          echo "Setelah masuk:"
+          echo "  tmux attach -t alma-parung"
           echo ""
-          echo "Start SSH access"
-
-          echo ""
-          echo "Setelah SSH berhasil:"
-          echo ""
-          echo "  cd ~/alma-parung"
-          echo ""
-          echo "Kemudian:"
-          echo ""
-          echo "  opencode"
-
+          echo "Untuk melihat session:"
+          echo "  tmux ls"
           echo ""
           echo "=========================================="
-
-          echo ""
-          echo "Runner akan tetap hidup sampai:"
-          echo "- workflow dihentikan"
-          echo "- workflow timeout"
-          echo "- runner mengalami masalah"
-          echo ""
 
           while true; do
             sleep 60
           done
 
-
-      # ==========================================
-      # 8. CLEANUP
-      # ==========================================
+      # 10. Cleanup
       - name: Cleanup
         if: always()
         shell: bash
         run: |
-          echo "=========================================="
-          echo " CLEANUP"
-          echo "=========================================="
-
+          tmux kill-session -t alma-parung 2>/dev/null || true
           fusermount3 -u "$RUNNER_PROJECT" 2>/dev/null || true
-
-          echo ""
-          echo "Cleanup complete."

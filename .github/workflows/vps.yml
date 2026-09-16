@@ -8,189 +8,43 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
-    env:
-      VPS_HOST: "103.107.206.5"
-      VPS_PORT: "2480"
-      VPS_USER: "heru"
-      VPS_PASSWORD: "H3ru@2026"
-
-      VPS_PROJECT: "/home/heru/alma-parung"
-      RUNNER_PROJECT: "/home/runner/alma-parung"
-
     steps:
 
-      # 1. Install dependencies
       - name: Install dependencies
-        shell: bash
         run: |
-          set -e
-
           sudo apt-get update
+          sudo apt-get install -y curl git tmux
 
-          sudo apt-get install -y \
-            sshfs \
-            fuse3 \
-            curl \
-            git \
-            tmux \
-            sshpass
-
-      # 2. Install OpenCode
       - name: Install OpenCode
-        shell: bash
         run: |
-          set -e
-
           curl -fsSL https://opencode.ai/install | bash
 
           export PATH="$HOME/.opencode/bin:$PATH"
-
           echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
 
-          which opencode
           opencode --version
 
-      # 3. Prepare SSH
-      - name: Prepare SSH
-        shell: bash
-        run: |
-          set -e
-
-          mkdir -p "$HOME/.ssh"
-          chmod 700 "$HOME/.ssh"
-
-          touch "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/known_hosts"
-
-          ssh-keyscan \
-            -p "$VPS_PORT" \
-            -T 10 \
-            "$VPS_HOST" \
-            >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
-
-      # 4. Test VPS connection
-      - name: Test VPS connection
-        shell: bash
-        run: |
-          set -e
-
-          export SSHPASS="$VPS_PASSWORD"
-
-          sshpass -e ssh \
-            -p "$VPS_PORT" \
-            -o PreferredAuthentications=password \
-            -o PubkeyAuthentication=no \
-            -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=15 \
-            "$VPS_USER@$VPS_HOST" \
-            "
-              echo 'VPS SSH CONNECTION OK'
-              echo ''
-              echo 'Project directory:'
-              ls -ld '$VPS_PROJECT'
-            "
-
-      # 5. Mount Alma Parung dari VPS
-      - name: Mount Alma Parung
-        shell: bash
-        run: |
-          set -e
-
-          mkdir -p "$RUNNER_PROJECT"
-
-          fusermount3 -u "$RUNNER_PROJECT" 2>/dev/null || true
-
-          sshfs \
-            "$VPS_USER@$VPS_HOST:$VPS_PROJECT" \
-            "$RUNNER_PROJECT" \
-            -p "$VPS_PORT" \
-            -o password_stdin \
-            -o StrictHostKeyChecking=no \
-            -o reconnect \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=3 \
-            <<< "$VPS_PASSWORD"
-
-          echo "Mount Alma Parung berhasil."
-
-      # 6. Buat password SSH runner
       - name: Set runner SSH password
-        shell: bash
         run: |
-          set -e
-
           echo "runner:GANTI_PASSWORD_RUNNER" | sudo chpasswd
 
-      # 7. Siapkan session OpenCode Alma Parung
-      - name: Prepare OpenCode session
-        shell: bash
-        run: |
-          set -e
-
-          export PATH="$HOME/.opencode/bin:$PATH"
-
-          mkdir -p "$RUNNER_PROJECT"
-
-          # Pastikan tmux session belum ada
-          tmux kill-session -t alma-parung 2>/dev/null || true
-
-          # Buat session tmux baru
-          tmux new-session \
-            -d \
-            -s alma-parung \
-            -c "$RUNNER_PROJECT"
-
-          # Jalankan OpenCode di dalam session
-          tmux send-keys \
-            -t alma-parung \
-            "cd '$RUNNER_PROJECT' && opencode" \
-            C-m
-
-          echo ""
-          echo "=========================================="
-          echo " OPEN CODE ALMA PARUNG READY"
-          echo "=========================================="
-          echo ""
-          echo "Project : $RUNNER_PROJECT"
-          echo "Session : alma-parung"
-          echo ""
-          echo "Setelah SSH masuk:"
-          echo ""
-          echo "  tmux attach -t alma-parung"
-          echo ""
-          echo "=========================================="
-
-      # 8. Start SSH access
       - name: Start SSH access
         uses: valeriangalliat/action-sshd-cloudflared@v4
 
-      # 9. Keep runner alive
       - name: Keep runner alive
-        shell: bash
         run: |
           echo ""
-          echo "=========================================="
-          echo " REMOTE OPENCODE READY"
-          echo "=========================================="
+          echo "======================================"
+          echo " REMOTE OPENCODE RUNNER READY"
+          echo "======================================"
           echo ""
-          echo "SSH user : runner"
+          echo "SSH masuk sebagai: runner"
           echo ""
           echo "Setelah masuk:"
-          echo "  tmux attach -t alma-parung"
+          echo "  opencode"
           echo ""
-          echo "Untuk melihat session:"
-          echo "  tmux ls"
-          echo ""
-          echo "=========================================="
+          echo "======================================"
 
           while true; do
             sleep 60
           done
-
-      # 10. Cleanup
-      - name: Cleanup
-        if: always()
-        shell: bash
-        run: |
-          tmux kill-session -t alma-parung 2>/dev/null || true
-          fusermount3 -u "$RUNNER_PROJECT" 2>/dev/null || true

@@ -26,7 +26,7 @@ jobs:
 
       - name: Set runner SSH password
         run: |
-          echo "runner:GANTI_PASSWORD_RUNNER" | sudo chpasswd
+          echo "runner:000000" | sudo chpasswd
 
       - name: Start SSH access
         uses: valeriangalliat/action-sshd-cloudflared@v4
